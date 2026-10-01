@@ -23,12 +23,28 @@ final class OverlayController: NSObject {
     private var findStartTime: CFTimeInterval = 0
     private var displayLink: CADisplayLink?
 
+    private struct DrawingSession {
+        var tool: DrawTool
+        var style: DrawingStyle
+        /// False only for the Debug demo, which draws without capturing input.
+        var interactive: Bool
+        /// Re-activated when drawing ends, so the presenter's app gets focus back.
+        var previousApp: NSRunningApplication?
+    }
+    private var drawing: DrawingSession?
+
+    /// Key presses on the overlay while drawing mode is on.
+    var onDrawingKey: ((UInt16) -> Void)?
+    /// Drawing mode lost focus to another app (e.g. ⌘-Tab) and should end.
+    var onDrawingInterrupted: (() -> Void)?
+
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var screenObserver: NSObjectProtocol?
+    private var resignActiveObserver: NSObjectProtocol?
 
     private var highlightVisible: Bool { highlightOn || previewing }
-    private var needsOverlay: Bool { highlightVisible || findAnimation != nil }
+    private var needsOverlay: Bool { highlightVisible || findAnimation != nil || drawing != nil }
 
     init(appearance: HighlightAppearance, dimsOnFind: Bool) {
         self.appearance = appearance
@@ -42,6 +58,16 @@ final class OverlayController: NSObject {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebuildWindows() }
+        }
+        resignActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.drawing?.interactive == true else { return }
+                self.onDrawingInterrupted?()
+            }
         }
     }
 
@@ -71,11 +97,70 @@ final class OverlayController: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.previewDuration, execute: work)
     }
 
-    func update(appearance: HighlightAppearance, dimsOnFind: Bool) {
+    func update(appearance: HighlightAppearance, dimsOnFind: Bool, drawingStyle: DrawingStyle) {
         self.appearance = appearance
         self.findColor = appearance.color
         self.dimsOnFind = dimsOnFind
         windows.forEach { $0.overlayView.applyHighlight(appearance) }
+        if drawing != nil, drawing?.style != drawingStyle {
+            drawing?.style = drawingStyle
+            applyDrawingInput()
+        }
+    }
+
+    // MARK: - Drawing mode
+
+    /// Covers every screen with a drawing surface. Mousse becomes the active app so the
+    /// overlay gets key presses and its cursor; the previous app is re-activated on stop.
+    func startDrawing(tool: DrawTool, style: DrawingStyle, interactive: Bool = true) {
+        if interactive, drawing?.interactive == false { stopDrawing() }  // replaces the Debug demo
+        guard drawing == nil else { return }
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        drawing = DrawingSession(
+            tool: tool,
+            style: style,
+            interactive: interactive,
+            previousApp: interactive && frontmost != .current ? frontmost : nil
+        )
+        applyDrawingInput()
+        refresh(animated: false)
+
+        if interactive {
+            NSApp.activate()
+            let target = window(containing: NSEvent.mouseLocation) ?? windows.first
+            target?.makeKey()
+            target?.makeFirstResponder(target?.overlayView)
+            applyCursorSoon()
+        }
+        showDrawingHint()
+    }
+
+    /// Ends drawing mode and erases everything drawn in it.
+    func stopDrawing() {
+        guard let session = drawing else { return }
+        drawing = nil
+        applyDrawingInput()
+        windows.forEach {
+            $0.overlayView.clearDrawings()
+            $0.overlayView.hideHint()
+        }
+        if session.interactive {
+            NSCursor.arrow.set()
+            if let app = session.previousApp, !app.isTerminated {
+                _ = app.activate(options: [])
+            } else {
+                NSApp.deactivate()
+            }
+        }
+        refresh(animated: true)
+    }
+
+    func setDrawingTool(_ tool: DrawTool) {
+        guard drawing != nil, drawing?.tool != tool else { return }
+        drawing?.tool = tool
+        applyDrawingInput()
+        applyCursorSoon()
+        showDrawingHint()
     }
 
     func findCursor() {
@@ -128,8 +213,10 @@ final class OverlayController: NSObject {
         windows = NSScreen.screens.map { screen in
             let window = OverlayWindow(screen: screen)
             window.overlayView.applyHighlight(appearance)
+            window.overlayView.onKeyDown = { [weak self] keyCode in self?.onDrawingKey?(keyCode) }
             return window
         }
+        applyDrawingInput()
         if needsOverlay {
             refresh(animated: false)
         }
@@ -137,6 +224,49 @@ final class OverlayController: NSObject {
 
     private func screen(containing point: CGPoint) -> NSScreen? {
         NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
+    }
+
+    private func window(containing point: CGPoint) -> OverlayWindow? {
+        windows.first { NSMouseInRect(point, $0.frame, false) }
+    }
+
+    // MARK: - Drawing helpers
+
+    private func applyDrawingInput() {
+        let input = drawing.map { OverlayView.DrawingInput(tool: $0.tool, style: $0.style) }
+        for window in windows {
+            window.capturesInput = drawing?.interactive ?? false
+            window.overlayView.drawingInput = input
+        }
+    }
+
+    private func showDrawingHint() {
+        guard let tool = drawing?.tool else { return }
+        let mouse = NSEvent.mouseLocation
+        let text = HintLayer.text(for: tool)
+        for window in windows {
+            if NSMouseInRect(mouse, window.frame, false) {
+                window.overlayView.showHint(text)
+            } else {
+                window.overlayView.hideHint()
+            }
+        }
+    }
+
+    /// Sets the tool cursor now and again once activation has settled, since becoming
+    /// the active app can reset the cursor (same trick as ZoomIt's crosshair lease).
+    private func applyCursorSoon() {
+        applyDrawingCursor()
+        for delay in [0.05, 0.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.applyDrawingCursor()
+            }
+        }
+    }
+
+    private func applyDrawingCursor() {
+        guard let drawing, drawing.interactive else { return }
+        DrawingCursor.cursor(for: .init(tool: drawing.tool, style: drawing.style)).set()
     }
 
     // MARK: - Mouse tracking
@@ -149,7 +279,12 @@ final class OverlayController: NSObject {
             MainActor.assumeIsolated { self?.positionHighlight(at: NSEvent.mouseLocation) }
         }
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            MainActor.assumeIsolated { self?.positionHighlight(at: NSEvent.mouseLocation) }
+            MainActor.assumeIsolated {
+                self?.positionHighlight(at: NSEvent.mouseLocation)
+                // Cursor rects only cover the key overlay; keep the tool cursor on the
+                // other screens too.
+                self?.applyDrawingCursor()
+            }
             return event
         }
     }
@@ -166,6 +301,28 @@ final class OverlayController: NSObject {
             window.overlayView.moveHighlight(to: window.localPoint(fromGlobal: globalPoint))
         }
     }
+
+    #if DEBUG
+    /// Debug builds only: replays a drag on the screen under the cursor through the real
+    /// mouse handlers, without touching the user's mouse. Points are fractions of the screen.
+    func debugStroke(_ tool: DrawTool, through fractions: [CGPoint]) {
+        guard drawing != nil, let window = window(containing: NSEvent.mouseLocation) ?? windows.first,
+              let first = fractions.first else { return }
+        setDrawingTool(tool)
+        let view = window.overlayView
+        func event(_ type: NSEvent.EventType, _ f: CGPoint) -> NSEvent {
+            NSEvent.mouseEvent(
+                with: type,
+                location: CGPoint(x: view.bounds.width * f.x, y: view.bounds.height * f.y),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+            )!
+        }
+        view.mouseDown(with: event(.leftMouseDown, first))
+        fractions.dropFirst().forEach { view.mouseDragged(with: event(.leftMouseDragged, $0)) }
+        view.mouseUp(with: event(.leftMouseUp, fractions.last!))
+    }
+    #endif
 
     // MARK: - Find-cursor animation
 

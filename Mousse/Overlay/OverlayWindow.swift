@@ -3,8 +3,17 @@ import QuartzCore
 
 /// A transparent, click-through panel covering one screen. It floats above everything
 /// (including full-screen apps and the menu bar) and is included in screen sharing.
+/// In drawing mode it takes mouse and key input instead of passing it through.
 final class OverlayWindow: NSPanel {
     let overlayView: OverlayView
+
+    /// Whether the overlay is capturing input for drawing mode.
+    var capturesInput = false {
+        didSet {
+            ignoresMouseEvents = !capturesInput
+            acceptsMouseMovedEvents = capturesInput
+        }
+    }
 
     init(screen: NSScreen) {
         overlayView = OverlayView(frame: NSRect(origin: .zero, size: screen.frame.size))
@@ -28,7 +37,7 @@ final class OverlayWindow: NSPanel {
         overlayView.setContentsScale(screen.backingScaleFactor)
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { capturesInput }
     override var canBecomeMain: Bool { false }
 
     /// Converts a global (Cocoa, bottom-left origin) point into this overlay's view space.
@@ -49,15 +58,33 @@ final class OverlayView: NSView {
         var color: NSColor
     }
 
+    /// The active tool and style while this screen accepts drawing input.
+    struct DrawingInput {
+        var tool: DrawTool
+        var style: DrawingStyle
+    }
+
     private static let dimAlpha: CGFloat = 0.45
     private static let fadeDuration: CFTimeInterval = 0.15
 
+    private let canvas = DrawingCanvas()
     private let dimLayer = CAShapeLayer()
     private let spotlightRingLayer = CAShapeLayer()
     private let pulseLayer = CAShapeLayer()
     private let highlightLayer = CAShapeLayer()
+    private let hintLayer = HintLayer()
 
     private var highlightAppearance: HighlightAppearance?
+
+    /// Non-nil while drawing mode is on; mouse drags then draw instead of passing through.
+    var drawingInput: DrawingInput? {
+        didSet {
+            if drawingInput == nil { canvas.finish() }
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+    /// Key presses while drawing mode is on (virtual key codes, layout-independent).
+    var onKeyDown: ((UInt16) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -68,11 +95,14 @@ final class OverlayView: NSView {
             "position": NSNull(), "bounds": NSNull(), "path": NSNull(), "opacity": NSNull(),
             "fillColor": NSNull(), "strokeColor": NSNull(), "lineWidth": NSNull(), "hidden": NSNull(),
         ]
+        // Back to front: drawings, find-cursor dim and rings, highlight, hint.
+        layer?.addSublayer(canvas.layer)
         for shape in [dimLayer, spotlightRingLayer, pulseLayer, highlightLayer] {
             shape.actions = noActions
             shape.isHidden = true
             layer?.addSublayer(shape)
         }
+        layer?.addSublayer(hintLayer)
 
         dimLayer.fillRule = .evenOdd
         dimLayer.fillColor = NSColor.black.cgColor
@@ -91,6 +121,57 @@ final class OverlayView: NSView {
         for shape in [dimLayer, spotlightRingLayer, pulseLayer, highlightLayer] {
             shape.contentsScale = scale
         }
+        canvas.setContentsScale(scale)
+        hintLayer.setContentsScale(scale)
+    }
+
+    // MARK: - Drawing
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let input = drawingInput else { return }
+        canvas.begin(input.tool, style: input.style, at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard drawingInput != nil else { return }
+        canvas.extend(to: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard drawingInput != nil else { return }
+        canvas.extend(to: convert(event.locationInWindow, from: nil))
+        canvas.finish()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Swallow every key while drawing so nothing beeps; the controller acts on the
+        // few it knows.
+        guard drawingInput != nil else { return super.keyDown(with: event) }
+        if !event.isARepeat { onKeyDown?(event.keyCode) }
+    }
+
+    override func resetCursorRects() {
+        if let input = drawingInput {
+            addCursorRect(bounds, cursor: DrawingCursor.cursor(for: input))
+        }
+    }
+
+    func clearDrawings() {
+        canvas.clear()
+    }
+
+    // MARK: - Hint
+
+    /// Shows a short-lived pill near the bottom of this screen.
+    func showHint(_ text: NSAttributedString) {
+        hintLayer.show(text, centeredAt: CGPoint(x: bounds.midX, y: 120))
+    }
+
+    func hideHint() {
+        hintLayer.hide()
     }
 
     // MARK: - Cursor highlight

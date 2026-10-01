@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -9,6 +10,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     /// anywhere outside it. `.transient` alone doesn't reliably do this for
     /// LSUIElement menu bar apps.
     private var globalClickMonitor: Any?
+    private var dismissSubscription: AnyCancellable?
 
     init(model: AppModel) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -20,6 +22,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.contentViewController = hosting
         popover.delegate = self
+        dismissSubscription = model.menuDismissRequests.sink { [weak self] in
+            self?.popover.performClose(nil)
+        }
 
         if let button = statusItem.button {
             // Mousse dome with a cursor cut-out (vector PDF), template-rendered so it

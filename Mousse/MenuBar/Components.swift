@@ -57,7 +57,7 @@ struct ActionRow<Trailing: View>: View {
     }
 }
 
-/// A labelled settings line, indented under its ActionRow so labels align with titles.
+/// A labelled settings line: fixed-width label column, control to the right.
 struct SettingRow<Content: View>: View {
     let label: String
     @ViewBuilder let content: () -> Content
@@ -67,10 +67,27 @@ struct SettingRow<Content: View>: View {
             Text(label)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .frame(width: 52, alignment: .leading)
+                .frame(width: 64, alignment: .leading)
             content()
         }
-        .padding(.leading, 34)
+    }
+}
+
+/// A keycap-style chip for a single key, e.g. "R" or "Esc".
+struct KeyCap: View {
+    let key: String
+
+    init(_ key: String) {
+        self.key = key
+    }
+
+    var body: some View {
+        Text(key)
+            .font(.caption.monospaced())
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .frame(minWidth: 30)
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+            .foregroundStyle(.secondary)
     }
 }
 
@@ -92,14 +109,14 @@ struct ValueSlider: View {
     }
 }
 
-/// Preset color dots. Swatches instead of a ColorPicker because the system color panel
-/// steals focus and closes the transient popover.
+/// Preset color dots. Swatches instead of a ColorPicker keep every color choice to the
+/// same small, presentation-friendly palette.
 struct ColorSwatchPicker: View {
-    @Binding var selection: HighlightColor
+    @Binding var selection: PaletteColor
 
     var body: some View {
         HStack(spacing: 8) {
-            ForEach(HighlightColor.allCases) { color in
+            ForEach(PaletteColor.allCases) { color in
                 Button {
                     selection = color
                 } label: {
