@@ -25,3 +25,6 @@ Package.resolved
 # Distribution artifacts
 *.dmg
 build/
+
+# Icon exploration renders (kept locally, regenerate with each round's script)
+docs/icon-candidates/

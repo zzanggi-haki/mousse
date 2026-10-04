@@ -1,8 +1,17 @@
-# Mousse
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Mousse icon">
+</p>
 
-화면공유·발표할 때 켜두는 가벼운 macOS 메뉴바 커서 도구.
+<h1 align="center">Mousse</h1>
 
-<img src="docs/menu.png" width="400" alt="Mousse 메뉴">
+<p align="center">
+  화면공유·발표할 때 켜두는 가벼운 macOS 메뉴바 커서 도구<br>
+  <i>mouse + mousse — 커서 모양 초코 무스 케이크</i>
+</p>
+
+<p align="center">
+  <img src="docs/menu.png" width="400" alt="Mousse 메뉴">
+</p>
 
 ## 기능 로드맵
 
@@ -55,7 +64,7 @@ Mousse/
 
 ```bash
 ./scripts/run_dev.sh      # xcodegen → Debug 빌드 → Apple Development 서명 → ~/Applications 설치 → 재실행
-./scripts/make_icons.sh   # 아이콘(메뉴바 PDF + 앱 아이콘) 다시 그리기
+./scripts/make_icons.sh   # 아이콘(메뉴바 PDF + 앱 아이콘) 다시 그리기 — 형태·색은 scripts/render_icons.swift 한 곳
 ```
 
 Xcode는 `DEVELOPER_DIR`로 지정해서 쓴다(시스템 기본은 Command Line Tools). Debug 빌드는

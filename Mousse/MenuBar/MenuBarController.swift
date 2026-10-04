@@ -27,11 +27,10 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         }
 
         if let button = statusItem.button {
-            // Mousse dome with a cursor cut-out (vector PDF), template-rendered so it
-            // adapts to light/dark menu bars.
+            // The cursor as a slice of cake (vector PDF authored at its menu bar size,
+            // 22×14 pt), template-rendered so it adapts to light/dark menu bars.
             let image = NSImage(named: "MenuBarIcon")
             image?.isTemplate = true
-            image?.size = NSSize(width: 19, height: 15.2)  // 30×24 PDF, scaled to menu-bar height
             button.image = image
             button.action = #selector(togglePopover(_:))
             button.target = self

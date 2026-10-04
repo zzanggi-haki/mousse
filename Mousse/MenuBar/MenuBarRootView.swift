@@ -31,7 +31,7 @@ struct MenuBarRootView: View {
                 .renderingMode(.template)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 24, height: 19)
+                .frame(width: 25, height: 16)
             Text("Mousse").font(.headline)
             Spacer()
             Button {

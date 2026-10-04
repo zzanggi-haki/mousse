@@ -19,6 +19,7 @@ JK(학장기)의 맥 QoL 메뉴바 앱 시리즈 4번째. 화면공유·강의 �
 - `HotkeyCenter`는 press/release를 모두 전달한다 → 4단계 "누르는 동안" 구현에 사용.
 - 오버레이 원칙: 그릴 게 없으면 `orderOut` + 마우스 추적 중단 → 유휴 CPU 0%. 새 효과도 이 원칙을 지킨다.
 - 차별점은 한글 조합 표시. KeyCastr는 키 단위 `UCKeyTranslate`라 자모로 찍힌다. JK의 입력 소스는 `com.apple.inputmethod.Korean.2SetKorean`이고 레이아웃은 `com.apple.keylayout.2SetHangul` → 자모 변환은 OS 레이아웃으로 하고 조합 오토마타만 직접 구현.
+- 아이콘: 커서를 눕혀 옆에서 본 초코 무스 케이크 조각(끝 왼쪽·꼬리 오른쪽, 글레이즈 흘러내림, 카라멜 배경). `scripts/render_icons.swift`가 정본이고 메뉴바는 22×14pt 템플릿 PDF. 탐색 라운드 렌더는 `docs/icon-candidates/`(gitignore, 로컬 보관).
 - 참고 오픈소스: microsoft/ZoomitForMac (MIT, Swift; `LiveCaptureSession.swift`가 돋보기 참고), keycastr/keycastr (BSD).
 
 ## 빌드·실행
