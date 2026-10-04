@@ -84,8 +84,11 @@ final class OverlayController: NSObject {
     /// while the highlight itself is off.
     func previewHighlight() {
         guard !highlightOn else { return }
-        previewing = true
-        refresh(animated: false)
+        // Slider drags call this every tick; only the first one needs to show the overlay.
+        if !previewing {
+            previewing = true
+            refresh(animated: false)
+        }
 
         previewWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -127,9 +130,7 @@ final class OverlayController: NSObject {
 
         if interactive {
             NSApp.activate()
-            let target = window(containing: NSEvent.mouseLocation) ?? windows.first
-            target?.makeKey()
-            target?.makeFirstResponder(target?.overlayView)
+            focusDrawingWindow()
             applyCursorSoon()
         }
         showDrawingHint()
@@ -182,7 +183,7 @@ final class OverlayController: NSObject {
         if needsOverlay {
             orderOutWorkItem?.cancel()
             orderOutWorkItem = nil
-            windows.forEach { $0.orderFrontRegardless() }
+            for window in windows where !window.isVisible { window.orderFrontRegardless() }
             startMouseTracking()
             positionHighlight(at: NSEvent.mouseLocation)
         } else {
@@ -209,6 +210,10 @@ final class OverlayController: NSObject {
     }
 
     private func rebuildWindows() {
+        // The display link belongs to a view that is about to go away; a stale link
+        // would stop firing and leave the find animation (and the overlay) stuck.
+        displayLink?.invalidate()
+        displayLink = nil
         windows.forEach { $0.orderOut(nil); $0.close() }
         windows = NSScreen.screens.map { screen in
             let window = OverlayWindow(screen: screen)
@@ -220,6 +225,8 @@ final class OverlayController: NSObject {
         if needsOverlay {
             refresh(animated: false)
         }
+        if findAnimation != nil { startDisplayLink() }
+        if drawing?.interactive == true { focusDrawingWindow() }
     }
 
     private func screen(containing point: CGPoint) -> NSScreen? {
@@ -231,6 +238,13 @@ final class OverlayController: NSObject {
     }
 
     // MARK: - Drawing helpers
+
+    /// Makes the overlay under the cursor key so R/P reach it.
+    private func focusDrawingWindow() {
+        let target = window(containing: NSEvent.mouseLocation) ?? windows.first
+        target?.makeKey()
+        target?.makeFirstResponder(target?.overlayView)
+    }
 
     private func applyDrawingInput() {
         let input = drawing.map { OverlayView.DrawingInput(tool: $0.tool, style: $0.style) }
@@ -327,7 +341,8 @@ final class OverlayController: NSObject {
     // MARK: - Find-cursor animation
 
     private func startDisplayLink() {
-        guard displayLink == nil, let view = windows.first?.overlayView else { return }
+        guard displayLink == nil,
+              let view = (window(containing: NSEvent.mouseLocation) ?? windows.first)?.overlayView else { return }
         let link = view.displayLink(target: self, selector: #selector(displayLinkFired(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link

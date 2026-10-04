@@ -105,6 +105,8 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
 
     func windowWillClose(_ notification: Notification) {
         recorder.stop()
+        // Free the window and its SwiftUI content; it's rebuilt on the next opening.
+        DispatchQueue.main.async { [weak self] in self?.window = nil }
     }
 
     func windowDidResignKey(_ notification: Notification) {

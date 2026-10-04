@@ -9,6 +9,9 @@ final class DrawingCanvas {
     private static let clearDuration: CFTimeInterval = 0.15
     /// Drags shorter than this in both directions are treated as a click and dropped.
     private static let minRectSide: CGFloat = 4
+    /// Pen samples closer than this to the previous one add nothing visible (high-rate
+    /// mice report many), so they're skipped to keep the path short.
+    private static let minPenStep: CGFloat = 1.5
 
     let layer = CALayer()
 
@@ -59,6 +62,8 @@ final class DrawingCanvas {
             // Only the anchor and the latest corner matter.
             current!.points = [current!.points[0], point]
         case .pen:
+            let last = current!.points[current!.points.count - 1]
+            guard hypot(point.x - last.x, point.y - last.y) >= Self.minPenStep else { return }
             current!.points.append(point)
         }
         updatePath()
@@ -93,8 +98,8 @@ final class DrawingCanvas {
             fade.fromValue = shape.presentation()?.opacity ?? shape.opacity
             fade.toValue = 0
             fade.duration = Self.clearDuration
-            shape.removeAnimation(forKey: "fadeOut")
             shape.add(fade, forKey: "clear")
+            shape.removeAnimation(forKey: "fadeOut")
             shape.opacity = 0
         }
         CATransaction.commit()
@@ -125,7 +130,11 @@ final class DrawingCanvas {
         fade.fillMode = .backwards
 
         CATransaction.begin()
-        CATransaction.setCompletionBlock { [weak shape] in shape?.removeFromSuperlayer() }
+        CATransaction.setCompletionBlock { [weak shape] in
+            // Cancelled by clear(), which fades and removes the shape itself.
+            guard let shape, shape.animation(forKey: "clear") == nil else { return }
+            shape.removeFromSuperlayer()
+        }
         shape.add(fade, forKey: "fadeOut")
         shape.opacity = 0
         CATransaction.commit()
