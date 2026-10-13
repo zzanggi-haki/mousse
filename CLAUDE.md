@@ -49,6 +49,16 @@ screencapture -x -C a.png b.png c.png           # 모니터 3대, 커서 포함
 - 메뉴바 아이콘이 안 보이는 건 JK의 PAC-MEN-U가 새 아이콘을 화면 밖으로 미는 것이다(버그 아님). macOS 26에서는 상태 아이템 창을 제어 센터가 소유한다.
 - 모니터 3대: V28UE(메인, 1920×1080@2x), 내장 Retina(1728×1117), DR1602(1280×800).
 
+## 릴리스
+
+```sh
+./scripts/release.sh v1.2.3 --notes-file notes.md
+```
+
+DMG 빌드 → GitHub 릴리스 생성 → [Snackbar](https://github.com/zzanggi-haki/snackbar) 사이트 갱신 신호까지 한 번에 한다.
+릴리스 노트 첫 문단이 사이트 "최근 업데이트"에 요약으로 실린다. 웹에서 직접 릴리스를 만들면
+신호가 안 가니 이 스크립트를 쓴다.
+
 ## 커밋
 
 작성자는 로컬 git 설정(zzanggi-haki)을 쓴다. 커밋·푸시는 JK가 요청할 때만 한다.
