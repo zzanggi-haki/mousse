@@ -60,6 +60,18 @@ Mousse/
 - 아무 효과도 없을 땐 오버레이를 내리고 마우스 추적도 멈춘다 → 유휴 시 CPU 0에 가깝게.
 - 디자인 규칙은 `../Soundwich/docs/DESIGN_SYSTEM.md`를 따른다.
 
+## 설치
+
+터미널에 아래 한 줄을 붙여넣으면 최신 버전이 응용 프로그램에 설치되고 바로 실행돼요
+(Gatekeeper 경고 없음). macOS 14.2 이상, Apple Silicon·Intel 모두 지원.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zzanggi-haki/mousse/main/scripts/install.sh | bash
+```
+
+수동 설치는 [Releases](https://github.com/zzanggi-haki/mousse/releases)에서 `Mousse.dmg`를
+받아 응용 프로그램으로 드래그한 뒤, 첫 실행 시 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**.
+
 ## 빌드
 
 ```bash
